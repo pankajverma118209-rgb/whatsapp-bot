@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { makeWASocket, useMultiFileAuthState, DisconnectReason, makeInMemoryStore } = require('@whiskeysockets/baileys');
+const { makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
 const { toDataURL } = require('qrcode');
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -23,10 +23,7 @@ let activeSessionToken = '';
 let myProfileName = 'Pankaj WhatsApp';
 let myProfilePic = 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png';
 
-// Presence Tracker Object for Online / Last Seen
 let presenceMap = {};
-
-const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
 
 // MongoDB Connection
 mongoose.connect('mongodb+srv://pankajverma118209_db_user:NnH6aCj5VYeTnb18@cluster0.7tnmbt8.mongodb.net/', {
@@ -63,8 +60,6 @@ async function connectToWhatsApp() {
         printQRInTerminal: false
     });
 
-    store.bind(sock.ev);
-
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
@@ -98,7 +93,6 @@ async function connectToWhatsApp() {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Track Real-time Online / Offline Presence Updates
     sock.ev.on('presence.update', (json) => {
         const { id, presences } = json;
         if (presences && presences[id]) {
@@ -127,8 +121,7 @@ async function connectToWhatsApp() {
                 else if (msg.message?.documentMessage) { text = `[Document: ${msg.message.documentMessage.fileName || 'File'}]`; mType = 'document'; }
                 else if (!text) { text = '[Media/File]'; }
                 
-                let contactInfo = store.contacts[jid];
-                let resolvedName = contactInfo?.name || contactInfo?.notify || msg.pushName;
+                let resolvedName = msg.pushName;
                 let cleanPhone = '+' + jid.split('@')[0];
                 
                 if (!resolvedName) resolvedName = cleanPhone;
@@ -161,7 +154,6 @@ async function connectToWhatsApp() {
         }
     });
 
-    // Anti-Delete Listener
     sock.ev.on('messages.update', async (updates) => {
         for (const update of updates) {
             if (update.update && update.update.message === null) {
@@ -190,30 +182,14 @@ function authMiddleware(req, res, next) {
     }
 }
 
-// APIs
 app.get('/api/chats', authMiddleware, async (req, res) => {
     try {
         const allMsgs = await SavedMessage.find({}).sort({ timestamp: 1 });
         let chatsMap = {};
 
-        for (let jid in store.contacts) {
-            if (jid.includes('@s.whatsapp.net')) {
-                let c = store.contacts[jid];
-                let cleanPhone = '+' + jid.split('@')[0];
-                chatsMap[jid] = {
-                    id: jid,
-                    name: c.name || c.notify || cleanPhone,
-                    phone: cleanPhone,
-                    lastMsg: 'Tap to chat',
-                    pic: 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
-                };
-            }
-        }
-
         for (const m of allMsgs) {
             let cleanPhone = '+' + m.remoteJid.split('@')[0];
-            let contactInfo = store.contacts[m.remoteJid];
-            let chatName = contactInfo?.name || contactInfo?.notify || m.pushName;
+            let chatName = m.pushName;
             
             if (!chatName || chatName === 'Me' || chatName === cleanPhone) {
                 chatName = cleanPhone;
@@ -246,7 +222,6 @@ app.get('/api/chats', authMiddleware, async (req, res) => {
     }
 });
 
-// Presence / Online Status API
 app.get('/api/presence/:jid', authMiddleware, async (req, res) => {
     const jid = decodeURIComponent(req.params.jid);
     try {
@@ -319,7 +294,6 @@ app.post('/send', authMiddleware, async (req, res) => {
     }
 });
 
-// Safe Logout - Keeps Old Database History Intact
 app.get('/logout', async (req, res) => {
     try {
         if (sock) { try { await sock.logout(); } catch(e) {} }
@@ -339,7 +313,6 @@ app.get('/logout', async (req, res) => {
     }
 });
 
-// Explicit Clear Data API (If User clicks "Clear History")
 app.get('/clear-database', authMiddleware, async (req, res) => {
     try {
         await SavedMessage.deleteMany({});
@@ -441,13 +414,13 @@ app.get('/', (req, res) => {
                             <div class="menu-container">
                                 <button class="dot-btn" onclick="toggleMenu(event)">⋮</button>
                                 <div class="dropdown-menu" id="dropdownMenu">
-                                    <a href="/logout" onclick="return confirm('Logout karenge tab bhi purana DB data retained rahega. Continue?');">Logout (Keep Data)</a>
+                                    <a href="/logout" onclick="return confirm('Logout karenge tab bhi purana DB data retained raheगा. Continue?');">Logout (Keep Data)</a>
                                     <a href="/clear-database" style="color:#ff5252;" onclick="return confirm('KAYA AAP SACH ME SARA PURANA DATA DELETE KARNA CHAHTE HAIN?');">Clear Database</a>
                                 </div>
                             </div>
                         </div>
                         <div class="chats-list" id="chatsContainer">
-                            <div style="padding: 20px; text-align: center; color: #667781; font-size: 14px;">Syncing contacts & chats...</div>
+                            <div style="padding: 20px; text-align: center; color: #667781; font-size: 14px;">Syncing chats from database...</div>
                         </div>
                     </div>
                     
