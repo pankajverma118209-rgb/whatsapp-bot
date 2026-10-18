@@ -1,0 +1,17 @@
+{
+  "name": "pankaj-whatsapp-bot",
+  "version": "1.0.0",
+  "description": "Multi-User Isolated WhatsApp Web Interface by Pankaj Verma",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.5",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.19.2",
+    "mongoose": "^8.3.1",
+    "pino": "^8.20.0",
+    "qrcode": "^1.5.3"
+  }
+}
